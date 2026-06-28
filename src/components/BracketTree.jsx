@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Check, X, Clock, Trophy } from 'lucide-react'
+import { Check, X, Clock } from 'lucide-react'
 import {
   computeParticipants,
   buildBracketLayout,
@@ -37,6 +37,7 @@ export default function BracketTree({
   showResult = false,
   correctIds,
   wrongIds,
+  deadIds,
   lateIds,
 }) {
   const participants = computeParticipants(matches, graph, picksByMatch)
@@ -58,11 +59,12 @@ export default function BracketTree({
     const decided = m.winner != null
     const isCorrect = correctIds?.has(matchId)
     const isWrong = wrongIds?.has(matchId)
+    // Undecided pick the team can no longer win — same logic as max-possible.
+    const isDead = !decided && deadIds?.has(matchId)
     const isLate = lateIds?.has(matchId)
 
     const row = (team, label) => {
       const isPick = pick && team === pick
-      const isActualWinner = decided && team && team === m.winner
       let cls =
         'flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[12px] leading-tight'
       if (isPick && showResult && decided) {
@@ -82,13 +84,13 @@ export default function BracketTree({
             <span className="truncate">{team || label || 'TBD'}</span>
           </span>
           <span className="flex shrink-0 items-center gap-0.5">
-            {isActualWinner && (
-              <Trophy className="h-3 w-3 text-flame-400" aria-label="winner" />
-            )}
             {isPick && showResult && decided && isCorrect && (
               <Check className="h-3.5 w-3.5 text-pitch-300" />
             )}
             {isPick && showResult && decided && isWrong && (
+              <X className="h-3.5 w-3.5 text-red-300" />
+            )}
+            {isPick && showResult && isDead && (
               <X className="h-3.5 w-3.5 text-red-300" />
             )}
           </span>

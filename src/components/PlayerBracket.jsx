@@ -104,6 +104,7 @@ export default function PlayerBracket({
           showResult={true}
           correctIds={score.correctMatchIds}
           wrongIds={score.wrongMatchIds}
+          deadIds={score.deadMatchIds}
           lateIds={score.lateMatchIds}
         />
       </Card>

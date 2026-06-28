@@ -93,6 +93,7 @@ export function scorePlayer({ matches, graph, picksByMatch, submittedAt }) {
   const byRound = { R32: 0, R16: 0, QF: 0, SF: 0, F: 0, '3P': 0 }
   const correct = new Set()
   const wrong = new Set()
+  const dead = new Set() // undecided picks the team can no longer win (cascade X)
   let banked = 0
   let stillWinnable = 0
 
@@ -111,9 +112,11 @@ export function scorePlayer({ matches, graph, picksByMatch, submittedAt }) {
         wrong.add(m.match_id)
       }
     } else {
-      // undecided -> still winnable if the picked team can still win it
+      // undecided -> still winnable if the picked team can still win it;
+      // otherwise the pick is dead (same path/elimination logic as max-possible).
       const reach = forwardReachable(pick, matches, graph)
       if (reach.has(m.match_id)) stillWinnable += pts
+      else dead.add(m.match_id)
     }
   }
 
@@ -133,6 +136,7 @@ export function scorePlayer({ matches, graph, picksByMatch, submittedAt }) {
     maxPossible,
     correctMatchIds: correct,
     wrongMatchIds: wrong,
+    deadMatchIds: dead,
   }
 }
 
