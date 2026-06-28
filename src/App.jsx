@@ -185,6 +185,7 @@ function StandingsRoute({ matches, graph, leagues, players, picksByPlayer }) {
   const navigate = useNavigate()
   const known = validTabs(leagues)
   const activeTab = tab || COMBINED
+  const currentPath = activeTab === COMBINED ? '/standings' : `/standings/${activeTab}`
 
   if (tab && !known.includes(tab)) {
     return <Navigate to="/standings" replace />
@@ -201,7 +202,9 @@ function StandingsRoute({ matches, graph, leagues, players, picksByPlayer }) {
       onSelectTab={(slug) =>
         navigate(slug === COMBINED ? '/standings' : `/standings/${slug}`)
       }
-      onViewPlayer={(p) => navigate(`/standings/player/${p.id}`)}
+      onViewPlayer={(p) =>
+        navigate(`/standings/player/${p.id}`, { state: { from: currentPath } })
+      }
     />
   )
 }
@@ -243,7 +246,7 @@ function PlayerRoute({ matches, graph, players, picksByPlayer, leagueName }) {
       picksByMatch={picksByMatch}
       score={score}
       isOwnFreshSubmit={location.state?.fresh === true}
-      onBack={() => navigate('/standings')}
+      onBack={() => navigate(location.state?.from || '/standings')}
     />
   )
 }
