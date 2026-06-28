@@ -82,10 +82,6 @@ export default function EntryScreen({
         <p className="mt-1 text-lg font-semibold text-pitch-300">
           Knockout Bracket Tips
         </p>
-        <p className="mx-auto mt-3 max-w-xs text-sm text-night-300">
-          Predict every knockout result from the Round of 32 to the Final.
-          One bracket each — make it count.
-        </p>
       </div>
 
       {isLocked && (
