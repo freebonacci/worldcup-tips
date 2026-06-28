@@ -29,6 +29,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # The anon key lives in repo *settings* (an Actions secret), not in the
+          # source tree. It's baked into the public bundle at build time — that's
+          # fine: the anon key is public by design and RLS guards all writes.
+          VITE_SUPABASE_URL: https://ycfnpvwintoadppxyfdo.supabase.co
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
