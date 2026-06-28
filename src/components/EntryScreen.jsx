@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Trophy, ArrowRight, Lock, Clock, Eye } from 'lucide-react'
+import { Trophy, ArrowRight, Lock, Eye } from 'lucide-react'
 import { Button, Card } from './ui.jsx'
-import { REQUIRE_R32_RESOLVED } from '../config.js'
 
 const fmtDeadline = (iso) => {
   if (!iso) return ''
@@ -23,7 +22,6 @@ export default function EntryScreen({
   leagues,
   players,
   isLocked,
-  r32Ready,
   lockoutTime,
   onStartFlow,
   onStandings,
@@ -65,14 +63,6 @@ export default function EntryScreen({
       setNotice({
         type: 'err',
         text: 'Submissions are closed — the knockouts have started. You can still browse standings and brackets.',
-      })
-      return
-    }
-
-    if (REQUIRE_R32_RESOLVED && !r32Ready) {
-      setNotice({
-        type: 'wait',
-        text: 'The bracket opens once the group stage finishes and the Round of 32 is set. Check back soon!',
       })
       return
     }
@@ -157,16 +147,7 @@ export default function EntryScreen({
           </div>
 
           {notice && (
-            <div
-              className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${
-                notice.type === 'err'
-                  ? 'border-red-500/30 bg-red-500/10 text-red-200'
-                  : 'border-night-500/30 bg-night-700/30 text-night-100'
-              }`}
-            >
-              {notice.type === 'wait' && (
-                <Clock className="mt-0.5 h-4 w-4 shrink-0" />
-              )}
+            <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
               <span>{notice.text}</span>
             </div>
           )}

@@ -1,14 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Trophy, BarChart3, Home, AlertTriangle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useNavigate,
+  useLocation,
+  useParams,
+} from 'react-router-dom'
+import { Trophy, BarChart3, Home as HomeIcon, AlertTriangle } from 'lucide-react'
 import { supabase, supabaseConfigured } from './lib/supabase.js'
-import { buildGraph, r32Resolved } from './lib/bracket.js'
+import { buildGraph } from './lib/bracket.js'
 import { scorePlayer, picksToMap } from './lib/scoring.js'
+import { validTabs, COMBINED } from './lib/leagues.js'
 import { Spinner, Button } from './components/ui.jsx'
-import EntryScreen from './components/EntryScreen.jsx'
-import BracketFlow from './components/BracketFlow.jsx'
-import ReviewConfirm from './components/ReviewConfirm.jsx'
+import Home from './components/Home.jsx'
 import Standings from './components/Standings.jsx'
 import PlayerBracket from './components/PlayerBracket.jsx'
+
+// React Router basename derived from Vite's base ('/worldcup-tips/' in prod,
+// '/' in dev). Strip the trailing slash for the router.
+const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 
 export default function App() {
   const [status, setStatus] = useState('loading') // loading | ready | error
@@ -19,18 +31,9 @@ export default function App() {
   const [players, setPlayers] = useState([])
   const [picks, setPicks] = useState([])
 
-  // view: entry | flow | review | standings | player
-  const [view, setView] = useState('entry')
-
-  // bracket-flow draft state (lives only in React — refresh loses it)
-  const [draftPicks, setDraftPicks] = useState({})
-  const [stepIndex, setStepIndex] = useState(0)
-  const [pending, setPending] = useState(null) // { name, leagueId }
-
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState(null)
-
-  const [viewing, setViewing] = useState(null) // { player, fresh }
+  // Set true by the bracket builder while there are unsaved picks, so header
+  // navigation can warn before discarding them.
+  const dirtyRef = useRef(false)
 
   // ---- data loading ------------------------------------------------------
   const loadAll = useCallback(async () => {
@@ -73,7 +76,6 @@ export default function App() {
 
   // ---- derived -----------------------------------------------------------
   const graph = useMemo(() => buildGraph(matches), [matches])
-  const r32Ready = useMemo(() => r32Resolved(matches), [matches])
 
   const lockoutTime = useMemo(() => {
     const m90 = matches.find((m) => m.match_id === 'M90')
@@ -84,9 +86,7 @@ export default function App() {
     return Date.now() >= new Date(lockoutTime).getTime()
   }, [lockoutTime])
 
-  // Display order for the league picker / standings tabs: Schwarzies first
-  // (and therefore the pre-selected default), then the rest by id. Matching on
-  // the name keeps this correct regardless of the DB's insertion ids.
+  // League picker / standings tab order: Schwarzies first (and default).
   const orderedLeagues = useMemo(() => {
     const rank = (l) => (/schwarz/i.test(l.name) ? 0 : 1)
     return [...leagues].sort((a, b) => rank(a) - rank(b) || a.id - b.id)
@@ -94,216 +94,186 @@ export default function App() {
 
   const picksByPlayer = useMemo(() => {
     const map = {}
-    for (const row of picks) {
-      ;(map[row.player_id] ||= []).push(row)
-    }
+    for (const row of picks) (map[row.player_id] ||= []).push(row)
     return map
   }, [picks])
 
-  const leagueName = (id) => leagues.find((l) => l.id === id)?.name || ''
+  const leagueName = useCallback(
+    (id) => leagues.find((l) => l.id === id)?.name || '',
+    [leagues]
+  )
 
-  // ---- navigation helpers ------------------------------------------------
-  const goHome = () => {
-    if (
-      (view === 'flow' || view === 'review') &&
-      Object.keys(draftPicks).length > 0
-    ) {
-      if (
-        !window.confirm(
-          'Leave the bracket builder? Your picks are not saved yet and will be lost.'
-        )
-      )
-        return
-    }
-    setDraftPicks({})
-    setStepIndex(0)
-    setPending(null)
-    setSubmitError(null)
-    setView('entry')
-  }
+  const confirmLeave = useCallback(
+    () =>
+      !dirtyRef.current ||
+      window.confirm(
+        'Leave the bracket builder? Your unsaved picks will be lost.'
+      ),
+    []
+  )
 
-  const startFlow = (name, leagueId) => {
-    setPending({ name, leagueId })
-    setDraftPicks({})
-    setStepIndex(0)
-    setSubmitError(null)
-    setView('flow')
-  }
-
-  const openPlayer = (player, fresh = false) => {
-    setViewing({ player, fresh })
-    setView('player')
-  }
-
-  // ---- submission --------------------------------------------------------
-  const handleConfirm = async () => {
-    setSubmitting(true)
-    setSubmitError(null)
-    try {
-      if (isLocked) throw new Error('Submissions are closed — the deadline passed.')
-      if (Object.keys(draftPicks).length !== 32)
-        throw new Error('Your bracket is incomplete (need all 32 picks).')
-
-      const dup = players.find(
-        (p) => p.name.trim().toLowerCase() === pending.name.trim().toLowerCase()
-      )
-      if (dup)
-        throw new Error(
-          "That name's already taken — try adding a surname or initial."
-        )
-
-      const p_picks = Object.entries(draftPicks).map(
-        ([match_id, predicted_team]) => ({ match_id, predicted_team })
-      )
-
-      const { data, error } = await supabase.rpc('submit_bracket', {
-        p_name: pending.name,
-        p_league_id: pending.leagueId,
-        p_picks,
-      })
-      if (error) throw error
-
-      const newPlayer = Array.isArray(data) ? data[0] : data
-      await reloadPlayers()
-      setDraftPicks({})
-      setStepIndex(0)
-      setPending(null)
-      openPlayer(newPlayer, true)
-    } catch (e) {
-      setSubmitError(
-        e.message || 'Something went wrong saving your bracket. Please try again.'
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  // ---- render gates ------------------------------------------------------
-  if (status === 'loading') {
-    return (
-      <Shell onHome={goHome} onStandings={null}>
-        <Spinner label="Loading the tournament…" />
+  return (
+    <BrowserRouter basename={BASENAME}>
+      <Shell confirmLeave={confirmLeave}>
+        {status === 'loading' && <Spinner label="Loading the tournament…" />}
+        {status === 'error' && <ConfigError reason={loadError} />}
+        {status === 'ready' && (
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Home
+                  matches={matches}
+                  graph={graph}
+                  leagues={orderedLeagues}
+                  players={players}
+                  isLocked={isLocked}
+                  lockoutTime={lockoutTime}
+                  leagueName={leagueName}
+                  reloadPlayers={reloadPlayers}
+                  dirtyRef={dirtyRef}
+                />
+              }
+            />
+            <Route
+              path="/standings/player/:id"
+              element={
+                <PlayerRoute
+                  matches={matches}
+                  graph={graph}
+                  players={players}
+                  picksByPlayer={picksByPlayer}
+                  leagueName={leagueName}
+                />
+              }
+            />
+            <Route
+              path="/standings"
+              element={
+                <StandingsRoute
+                  matches={matches}
+                  graph={graph}
+                  leagues={orderedLeagues}
+                  players={players}
+                  picksByPlayer={picksByPlayer}
+                />
+              }
+            />
+            <Route
+              path="/standings/:tab"
+              element={
+                <StandingsRoute
+                  matches={matches}
+                  graph={graph}
+                  leagues={orderedLeagues}
+                  players={players}
+                  picksByPlayer={picksByPlayer}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
       </Shell>
-    )
-  }
+    </BrowserRouter>
+  )
+}
 
-  if (status === 'error') {
-    return (
-      <Shell onHome={null} onStandings={null}>
-        <ConfigError reason={loadError} />
-      </Shell>
-    )
-  }
+// ---- standings route wrapper (URL <-> tab) -------------------------------
+function StandingsRoute({ matches, graph, leagues, players, picksByPlayer }) {
+  const { tab } = useParams()
+  const navigate = useNavigate()
+  const known = validTabs(leagues)
+  const activeTab = tab || COMBINED
 
-  // viewing-player score (computed against that player's picks)
-  let viewScore = null
-  let viewPicksMap = null
-  if (view === 'player' && viewing) {
-    viewPicksMap = picksToMap(picksByPlayer[viewing.player.id] || [])
-    viewScore = scorePlayer({
-      matches,
-      graph,
-      picksByMatch: viewPicksMap,
-      submittedAt: viewing.player.submitted_at,
-    })
+  if (tab && !known.includes(tab)) {
+    return <Navigate to="/standings" replace />
   }
 
   return (
-    <Shell
-      onHome={goHome}
-      onStandings={() => {
-        if (
-          (view === 'flow' || view === 'review') &&
-          Object.keys(draftPicks).length > 0
-        ) {
-          if (
-            !window.confirm(
-              'Leave the bracket builder? Your unsaved picks will be lost.'
-            )
-          )
-            return
-        }
-        setView('standings')
-      }}
-      activeView={view}
-    >
-      {view === 'entry' && (
-        <EntryScreen
-          leagues={orderedLeagues}
-          players={players}
-          isLocked={isLocked}
-          r32Ready={r32Ready}
-          lockoutTime={lockoutTime}
-          onStartFlow={startFlow}
-          onStandings={() => setView('standings')}
-        />
-      )}
+    <Standings
+      matches={matches}
+      graph={graph}
+      leagues={leagues}
+      players={players}
+      picksByPlayer={picksByPlayer}
+      activeTab={activeTab}
+      onSelectTab={(slug) =>
+        navigate(slug === COMBINED ? '/standings' : `/standings/${slug}`)
+      }
+      onViewPlayer={(p) => navigate(`/standings/player/${p.id}`)}
+    />
+  )
+}
 
-      {view === 'flow' && pending && (
-        <BracketFlow
-          matches={matches}
-          graph={graph}
-          draftPicks={draftPicks}
-          setDraftPicks={setDraftPicks}
-          playerName={pending.name}
-          stepIndex={stepIndex}
-          setStepIndex={setStepIndex}
-          onReview={() => setView('review')}
-          onCancel={goHome}
-        />
-      )}
+// ---- player bracket route wrapper ----------------------------------------
+function PlayerRoute({ matches, graph, players, picksByPlayer, leagueName }) {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-      {view === 'review' && pending && (
-        <ReviewConfirm
-          matches={matches}
-          graph={graph}
-          draftPicks={draftPicks}
-          playerName={pending.name}
-          leagueName={leagueName(pending.leagueId)}
-          onConfirm={handleConfirm}
-          onBack={() => setView('flow')}
-          submitting={submitting}
-          error={submitError}
-        />
-      )}
+  const player = players.find((p) => p.id === id)
+  if (!player) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <p className="text-night-200">Bracket not found.</p>
+        <div className="mt-4">
+          <Button variant="ghost" onClick={() => navigate('/standings')}>
+            Back to standings
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
-      {view === 'standings' && (
-        <Standings
-          matches={matches}
-          graph={graph}
-          leagues={orderedLeagues}
-          players={players}
-          picksByPlayer={picksByPlayer}
-          onViewPlayer={(p) => openPlayer(p, false)}
-        />
-      )}
+  const picksByMatch = picksToMap(picksByPlayer[player.id] || [])
+  const score = scorePlayer({
+    matches,
+    graph,
+    picksByMatch,
+    submittedAt: player.submitted_at,
+  })
 
-      {view === 'player' && viewing && (
-        <PlayerBracket
-          player={viewing.player}
-          leagueName={leagueName(viewing.player.league_id)}
-          matches={matches}
-          graph={graph}
-          picksByMatch={viewPicksMap}
-          score={viewScore}
-          isOwnFreshSubmit={viewing.fresh}
-          onBack={() => setView('standings')}
-        />
-      )}
-    </Shell>
+  return (
+    <PlayerBracket
+      player={player}
+      leagueName={leagueName(player.league_id)}
+      matches={matches}
+      graph={graph}
+      picksByMatch={picksByMatch}
+      score={score}
+      isOwnFreshSubmit={location.state?.fresh === true}
+      onBack={() => navigate('/standings')}
+    />
   )
 }
 
 // ---- shared chrome -------------------------------------------------------
-function Shell({ children, onHome, onStandings, activeView }) {
+function Shell({ children, confirmLeave }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const go = (path) => {
+    if (confirmLeave()) navigate(path)
+  }
+
+  const onHome = location.pathname === '/'
+  const onStandings = location.pathname.startsWith('/standings')
+
+  const navBtn = (active) =>
+    `rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+      active
+        ? 'bg-white/10 text-white'
+        : 'text-night-300 hover:bg-white/5 hover:text-white'
+    }`
+
   return (
     <div className="min-h-[100dvh]">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-night-950/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <button
-            onClick={onHome || undefined}
-            disabled={!onHome}
-            className="flex items-center gap-2 disabled:opacity-100"
+            onClick={() => go('/')}
+            className="flex items-center gap-2"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-flame-400 to-flame-600">
               <Trophy className="h-4 w-4 text-night-950" />
@@ -313,32 +283,17 @@ function Shell({ children, onHome, onStandings, activeView }) {
             </span>
           </button>
           <nav className="flex items-center gap-1">
-            {onHome && (
-              <button
-                onClick={onHome}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  activeView === 'entry'
-                    ? 'bg-white/10 text-white'
-                    : 'text-night-300 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <Home className="mr-1 inline h-4 w-4" />
-                Home
-              </button>
-            )}
-            {onStandings && (
-              <button
-                onClick={onStandings}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  activeView === 'standings'
-                    ? 'bg-white/10 text-white'
-                    : 'text-night-300 hover:bg-white/5 hover:text-white'
-                }`}
-              >
-                <BarChart3 className="mr-1 inline h-4 w-4" />
-                Standings
-              </button>
-            )}
+            <button onClick={() => go('/')} className={navBtn(onHome)}>
+              <HomeIcon className="mr-1 inline h-4 w-4" />
+              Home
+            </button>
+            <button
+              onClick={() => go('/standings')}
+              className={navBtn(onStandings)}
+            >
+              <BarChart3 className="mr-1 inline h-4 w-4" />
+              Standings
+            </button>
           </nav>
         </div>
       </header>

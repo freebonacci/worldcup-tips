@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>World Cup 2026 — Knockout Tips</title>
+    <!--
+      SPA fallback for GitHub Pages. Pages has no server-side routing, so a
+      direct hit on a deep link (e.g. /worldcup-tips/standings/schwarzies) serves
+      this 404 page. We rewrite the path into a query string and redirect to the
+      app's index, where a snippet in index.html restores the real URL before the
+      router boots. pathSegmentsToKeep = 1 keeps the /worldcup-tips/ repo segment.
+      https://github.com/rafgraph/spa-github-pages
+    -->
+    <script type="text/javascript">
+      var pathSegmentsToKeep = 1
+      var l = window.location
+      l.replace(
+        l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname
+            .split('/')
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join('/') +
+          '/?/' +
+          l.pathname
+            .slice(1)
+            .split('/')
+            .slice(pathSegmentsToKeep)
+            .join('/')
+            .replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+      )
+    </script>
+  </head>
+  <body></body>
+</html>

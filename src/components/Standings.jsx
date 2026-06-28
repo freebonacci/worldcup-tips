@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { ChevronRight, Trophy } from 'lucide-react'
 import { scorePlayer, picksToMap, standingsSort } from '../lib/scoring.js'
+import { leagueSlug, leagueForSlug, COMBINED } from '../lib/leagues.js'
 
 const ROUND_COLS = [
   { key: 'R32', label: 'R32' },
@@ -14,17 +15,19 @@ const ROUND_COLS = [
 const medal = (rank) =>
   rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : ''
 
+// Tabs are URL-driven: `activeTab` is a slug ('schwarzies' / 'ben') or 'combined'.
+// Clicking a tab calls onSelectTab(slug) which the route wrapper turns into a
+// navigation, so the URL always reflects the visible tab and vice-versa.
 export default function Standings({
   matches,
   graph,
   leagues,
   players,
   picksByPlayer,
+  activeTab = COMBINED,
+  onSelectTab,
   onViewPlayer,
 }) {
-  const COMBINED = 'combined'
-  const [tab, setTab] = useState(leagues[0]?.id ?? COMBINED)
-
   // Score everyone once.
   const scored = useMemo(() => {
     return players.map((p) => {
@@ -39,15 +42,18 @@ export default function Standings({
     })
   }, [players, picksByPlayer, matches, graph])
 
+  const activeLeague = leagueForSlug(activeTab, leagues)
+
   const rows = useMemo(() => {
-    const filtered =
-      tab === COMBINED ? scored : scored.filter((p) => p.league_id === tab)
+    const filtered = activeLeague
+      ? scored.filter((p) => p.league_id === activeLeague.id)
+      : scored
     return [...filtered].sort(standingsSort)
-  }, [scored, tab])
+  }, [scored, activeLeague])
 
   const tabs = [
-    ...leagues.map((l) => ({ id: l.id, name: l.name })),
-    { id: COMBINED, name: 'Combined' },
+    ...leagues.map((l) => ({ slug: leagueSlug(l.name), name: l.name })),
+    { slug: COMBINED, name: 'Combined' },
   ]
 
   return (
@@ -61,10 +67,10 @@ export default function Standings({
       <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1">
         {tabs.map((t) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={t.slug}
+            onClick={() => onSelectTab?.(t.slug)}
             className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
-              tab === t.id
+              activeTab === t.slug
                 ? 'bg-pitch-500 text-night-950'
                 : 'bg-white/5 text-night-200 hover:bg-white/10'
             }`}
@@ -112,7 +118,7 @@ export default function Standings({
                 return (
                   <tr
                     key={p.id}
-                    onClick={() => onViewPlayer(p)}
+                    onClick={() => onViewPlayer?.(p)}
                     className="cursor-pointer border-t border-white/5 hover:bg-white/5"
                   >
                     <td className="sticky left-0 z-10 bg-[#0d1426] px-2 py-3 text-night-300">
@@ -154,7 +160,9 @@ export default function Standings({
       <p className="mt-3 px-1 text-xs text-night-400">
         Tap any player to see their full bracket. <strong>Total</strong> = banked
         points − late penalty. <strong>Max</strong> = the most they can still
-        reach. Recomputed live from results.
+        reach. <strong>Penalty</strong> = −3 points per Round-of-32 match that had
+        already kicked off before the player submitted their bracket. Recomputed
+        live from results.
       </p>
     </div>
   )

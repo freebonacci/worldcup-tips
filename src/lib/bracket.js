@@ -111,9 +111,9 @@ export function computeParticipants(matches, graph, picksByMatch) {
   )
 
   const resolveSlot = (parsed, realTeam, fallbackLabel) => {
-    // For R32 group slots, use the real resolved team. Before resolution we
-    // fall back to the human slot label ("Winner Group A") so the cascade is
-    // still walkable (see REQUIRE_R32_RESOLVED in src/config.js).
+    // For R32 group slots, use the real resolved team. Before the teams are
+    // resolved we fall back to the human slot label ("Winner Group A") so the
+    // cascade is always walkable.
     if (parsed.kind === 'group') return realTeam || fallbackLabel || null
     if (parsed.kind === 'winner') {
       return picksByMatch[parsed.ref] || null
