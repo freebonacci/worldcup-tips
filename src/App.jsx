@@ -145,11 +145,12 @@ export default function App() {
         throw new Error('Your bracket is incomplete (need all 32 picks).')
 
       const dup = players.find(
-        (p) =>
-          p.name.trim().toLowerCase() === pending.name.trim().toLowerCase() &&
-          p.league_id === pending.leagueId
+        (p) => p.name.trim().toLowerCase() === pending.name.trim().toLowerCase()
       )
-      if (dup) throw new Error('A bracket already exists for this name in this league.')
+      if (dup)
+        throw new Error(
+          "That name's already taken — try adding a surname or initial."
+        )
 
       const p_picks = Object.entries(draftPicks).map(
         ([match_id, predicted_team]) => ({ match_id, predicted_team })
@@ -234,7 +235,6 @@ export default function App() {
           r32Ready={r32Ready}
           lockoutTime={lockoutTime}
           onStartFlow={startFlow}
-          onViewBracket={(p) => openPlayer(p, false)}
           onStandings={() => setView('standings')}
         />
       )}

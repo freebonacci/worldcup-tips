@@ -26,6 +26,11 @@ create table if not exists players (
   created_at timestamptz not null default now()
 );
 
+-- Player names are globally unique across all leagues (case-insensitive). This
+-- index is the airtight enforcement: it closes the tiny race window in the RPC's
+-- existence check and also blocks any direct insert that bypasses the RPC.
+create unique index if not exists players_name_lower_uniq on players (lower(name));
+
 -- picks (one row per match per player; the whole bracket = 32 rows)
 create table if not exists picks (
   id uuid primary key default gen_random_uuid(),
@@ -84,12 +89,12 @@ begin
     raise exception 'Submissions are closed (deadline has passed).';
   end if;
 
-  -- One bracket per name per league.
+  -- Names must be globally unique across ALL leagues (case-insensitive).
   if exists (
     select 1 from players
-    where lower(name) = lower(p_name) and league_id = p_league_id
+    where lower(name) = lower(p_name)
   ) then
-    raise exception 'A bracket already exists for this name in this league.';
+    raise exception 'That name is already taken. Try adding a surname or initial.';
   end if;
 
   insert into players (name, league_id)
@@ -103,6 +108,11 @@ begin
   end loop;
 
   return v_player;
+exception
+  -- If two people submit the same name at once, the unique index catches the
+  -- loser of the race here — surface the same friendly message.
+  when unique_violation then
+    raise exception 'That name is already taken. Try adding a surname or initial.';
 end;
 $$;
 

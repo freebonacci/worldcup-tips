@@ -26,12 +26,19 @@ export default function EntryScreen({
   r32Ready,
   lockoutTime,
   onStartFlow,
-  onViewBracket,
   onStandings,
 }) {
   const [name, setName] = useState('')
   const [leagueId, setLeagueId] = useState(leagues[0]?.id ?? null)
   const [notice, setNotice] = useState(null)
+
+  // Names are globally unique across all leagues (case-insensitive).
+  const trimmedName = name.trim()
+  const nameTaken =
+    trimmedName.length > 0 &&
+    players.some(
+      (p) => p.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    )
 
   const submit = (e) => {
     e.preventDefault()
@@ -46,15 +53,11 @@ export default function EntryScreen({
       return
     }
 
-    const existing = players.find(
-      (p) =>
-        p.name.trim().toLowerCase() === trimmed.toLowerCase() &&
-        p.league_id === leagueId
-    )
-
-    if (existing) {
-      // Returning player — their bracket is already locked in.
-      onViewBracket(existing)
+    if (nameTaken) {
+      setNotice({
+        type: 'err',
+        text: "That name's already taken — try adding a surname or initial.",
+      })
       return
     }
 
@@ -117,8 +120,18 @@ export default function EntryScreen({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Sam Carter"
               autoComplete="off"
-              className="w-full rounded-xl border border-white/10 bg-night-950/60 px-4 py-3 text-base text-white placeholder:text-night-400 focus:border-pitch-400 focus:outline-none focus:ring-2 focus:ring-pitch-500/30"
+              aria-invalid={nameTaken}
+              className={`w-full rounded-xl border bg-night-950/60 px-4 py-3 text-base text-white placeholder:text-night-400 focus:outline-none focus:ring-2 ${
+                nameTaken
+                  ? 'border-red-500/50 focus:border-red-400 focus:ring-red-500/30'
+                  : 'border-white/10 focus:border-pitch-400 focus:ring-pitch-500/30'
+              }`}
             />
+            {nameTaken && (
+              <p className="mt-1.5 text-xs text-red-300">
+                That name's already taken — try adding a surname or initial.
+              </p>
+            )}
           </div>
 
           <div>
@@ -158,14 +171,19 @@ export default function EntryScreen({
             </div>
           )}
 
-          <Button type="submit" variant="primary" className="w-full">
+          <Button
+            type="submit"
+            variant="primary"
+            className="w-full"
+            disabled={nameTaken}
+          >
             Continue <ArrowRight className="h-4 w-4" />
           </Button>
         </form>
 
         <p className="mt-4 text-center text-xs text-night-400">
-          Already entered? Type the <em>same</em> name &amp; league to view your
-          locked bracket.
+          Names are unique across both leagues. Once you submit, view your
+          bracket any time from the <strong>Standings</strong> tab.
         </p>
       </Card>
 
