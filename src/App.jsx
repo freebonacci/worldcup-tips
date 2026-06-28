@@ -9,7 +9,7 @@ import {
   useParams,
 } from 'react-router-dom'
 import { Trophy, BarChart3, Home as HomeIcon, AlertTriangle } from 'lucide-react'
-import { supabase, supabaseConfigured } from './lib/supabase.js'
+import { supabase, supabaseConfigured, fetchAll } from './lib/supabase.js'
 import { buildGraph } from './lib/bracket.js'
 import { scorePlayer, picksToMap } from './lib/scoring.js'
 import { validTabs, COMBINED } from './lib/leagues.js'
@@ -38,10 +38,10 @@ export default function App() {
   // ---- data loading ------------------------------------------------------
   const loadAll = useCallback(async () => {
     const [m, l, p, pk] = await Promise.all([
-      supabase.from('matches').select('*'),
+      fetchAll('matches'),
       supabase.from('leagues').select('*').order('id'),
-      supabase.from('players').select('*'),
-      supabase.from('picks').select('*'),
+      fetchAll('players'),
+      fetchAll('picks'),
     ])
     const firstErr = m.error || l.error || p.error || pk.error
     if (firstErr) throw firstErr
@@ -53,8 +53,8 @@ export default function App() {
 
   const reloadPlayers = useCallback(async () => {
     const [p, pk] = await Promise.all([
-      supabase.from('players').select('*'),
-      supabase.from('picks').select('*'),
+      fetchAll('players'),
+      fetchAll('picks'),
     ])
     if (!p.error) setPlayers(p.data || [])
     if (!pk.error) setPicks(pk.data || [])
