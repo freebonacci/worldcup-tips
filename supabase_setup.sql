@@ -26,6 +26,11 @@ create table if not exists players (
   created_at timestamptz not null default now()
 );
 
+-- When true, the player is hidden from the Standings "Combined" view only; they
+-- still appear in their own league tab. Set per-row manually (e.g. the admin's
+-- own entry). Idempotent for existing databases:
+alter table players add column if not exists hidden_from_combined boolean not null default false;
+
 -- Player names are globally unique across all leagues (case-insensitive). This
 -- index is the airtight enforcement: it closes the tiny race window in the RPC's
 -- existence check and also blocks any direct insert that bypasses the RPC.

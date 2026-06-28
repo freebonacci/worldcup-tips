@@ -45,9 +45,11 @@ export default function Standings({
   const activeLeague = leagueForSlug(activeTab, leagues)
 
   const rows = useMemo(() => {
+    // Combined hides players flagged hidden_from_combined; the individual league
+    // tabs always show everyone, flagged or not.
     const filtered = activeLeague
       ? scored.filter((p) => p.league_id === activeLeague.id)
-      : scored
+      : scored.filter((p) => !p.hidden_from_combined)
     return [...filtered].sort(standingsSort)
   }, [scored, activeLeague])
 
